@@ -23,6 +23,12 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t non_empty = PTHREAD_COND_INITIALIZER;
 pthread_cond_t non_full = PTHREAD_COND_INITIALIZER;
 
+answer_t *answer_buffer[BABBLE_BUFFER_SIZE];
+int in_ans = 0, out_ans = 0, buff_count_ans = 0;
+pthread_mutex_t mutex_ans = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t non_empty_ans = PTHREAD_COND_INITIALIZER;
+pthread_cond_t non_full_ans = PTHREAD_COND_INITIALIZER;
+
 static void display_help(char *exec)
 {
         printf("Usage: %s -p port_number\n", exec);
@@ -121,7 +127,6 @@ static int process_command(command_t *cmd, answer_t **answer)
         return res;
 }
 
-
 void* put_in_command_buffer(command_t* cmd){
         pthread_mutex_lock(&mutex);
         while(buff_count == BABBLE_BUFFER_SIZE)
@@ -152,10 +157,41 @@ command_t* get_from_command_buffer(){
         return cmd;
 }
 
+void* put_in_answer_buffer(answer_t* ans){
+        pthread_mutex_lock(&mutex_ans);
+        while(buff_count_ans == BABBLE_BUFFER_SIZE)
+                pthread_cond_wait(&non_full_ans,&mutex_ans);
+
+        answer_buffer[in_ans] = ans;
+        in_ans = (in_ans + 1) % BABBLE_BUFFER_SIZE;
+        buff_count_ans++;
+        pthread_cond_signal(&non_empty_ans);
+        pthread_mutex_unlock(&mutex_ans);
+
+        return NULL;
+}
+
+answer_t* get_from_answer_buffer(){
+        answer_t* ans = NULL;
+        pthread_mutex_lock(&mutex_ans);
+        while(buff_count_ans == 0)
+                pthread_cond_wait (&non_empty_ans, &mutex_ans);
+
+
+        ans = answer_buffer[out_ans];
+        out_ans = (out_ans+1)% BABBLE_BUFFER_SIZE;
+        buff_count_ans--;
+        pthread_cond_signal(&non_full_ans);
+        pthread_mutex_unlock(&mutex_ans);
+
+        return ans;
+}
+
 void* communication_thread(void* arg)
 {
         socket_t* socket = (socket_t*)arg;
         int newsockfd = socket->fd;
+        free(arg);
         char* recv_buff=NULL;
         int recv_size=0;
 
@@ -245,7 +281,7 @@ void* communication_thread(void* arg)
 
 
 void* executor_thread(void* arg) {
-        printf("Executor thread ready\n");
+        printf("Executor_thread ready\n");
         answer_t *ans = NULL;
         command_t *cmd;
         for(;;) {
@@ -255,13 +291,24 @@ void* executor_thread(void* arg) {
                         fprintf(stderr, "Warning: unable to process command from client %lu\n", cmd->key);
                 }
                 free(cmd);
+
+                put_in_answer_buffer(ans);
+
+        }
+        return NULL;
+}
+
+
+void* answer_thread(void* arg){
+        printf("Answer thread ready\n");
+        answer_t *ans = NULL;
+        for(;;) {
+                ans = get_from_answer_buffer();
                 if(send_answer_to_client(ans) == -1) {
                         fprintf(stderr, "Warning: unable to answer command from client %lu\n", ans->key);
                 }
                 free_answer(ans);
-
         }
-        return NULL;
 }
 
 int main(int argc, char *argv[])
@@ -274,6 +321,7 @@ int main(int argc, char *argv[])
 
         pthread_t communication_threads[BABBLE_BUFFER_SIZE];
         pthread_t executor_threads[BABBLE_EXECUTOR_THREADS];
+        pthread_t ans_threads[BABBLE_ANSWER_THREADS];
 
         int index = 0;
 
@@ -305,12 +353,15 @@ int main(int argc, char *argv[])
         }
 
         printf("Babble server bound to port %d\n", portno);
-
         /* Executor thread */
         for (size_t j = 0; j < BABBLE_EXECUTOR_THREADS; j++) {
                 pthread_create(&executor_threads[j], NULL, executor_thread, NULL);
         }
 
+        /* Answer thread */
+        for (size_t k = 0; k < BABBLE_ANSWER_THREADS; k++) {
+                pthread_create(&ans_threads[k], NULL, answer_thread, NULL);
+        }
         /* main server loop */
         while(1) {
 

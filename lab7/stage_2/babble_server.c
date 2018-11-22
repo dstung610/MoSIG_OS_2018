@@ -319,8 +319,8 @@ int main(int argc, char *argv[])
         int opt;
         int nb_args=1;
 
-        pthread_t executor;
-        pthread_t tids[BABBLE_BUFFER_SIZE];
+        pthread_t communication_threads[BABBLE_BUFFER_SIZE];
+        pthread_t executor_threads[BABBLE_EXECUTOR_THREADS];
         pthread_t ans_threads[BABBLE_ANSWER_THREADS];
 
         int index = 0;
@@ -353,12 +353,17 @@ int main(int argc, char *argv[])
         }
 
         printf("Babble server bound to port %d\n", portno);
+
         /* Executor thread */
-        pthread_create(&executor, NULL, executor_thread, NULL);
+        for (size_t j = 0; j < BABBLE_EXECUTOR_THREADS; j++) {
+                pthread_create(&executor_threads[j], NULL, executor_thread, NULL);
+        }
+
         /* Answer thread */
         for (size_t k = 0; k < BABBLE_ANSWER_THREADS; k++) {
                 pthread_create(&ans_threads[k], NULL, answer_thread, NULL);
         }
+
         /* main server loop */
         while(1) {
 
@@ -367,7 +372,7 @@ int main(int argc, char *argv[])
                 }
                 s = malloc(sizeof(socket_t));
                 s->fd = newsockfd;
-                if(pthread_create (&tids[index], NULL, communication_thread, (void*)s) != 0) {
+                if(pthread_create (&communication_threads[index], NULL, communication_thread, (void*)s) != 0) {
                         printf("Failed to create communication_thread\n");
                 }
                 index++;
