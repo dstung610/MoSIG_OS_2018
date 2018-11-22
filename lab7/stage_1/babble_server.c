@@ -121,6 +121,37 @@ static int process_command(command_t *cmd, answer_t **answer)
         return res;
 }
 
+
+void* put_in_command_buffer(command_t* cmd){
+        pthread_mutex_lock(&mutex);
+        while(buff_count == BABBLE_BUFFER_SIZE)
+                pthread_cond_wait(&non_full,&mutex);
+
+        command_buffer[in] = cmd;
+        in = (in + 1) % BABBLE_BUFFER_SIZE;
+        buff_count++;
+        pthread_cond_signal(&non_empty);
+        pthread_mutex_unlock(&mutex);
+
+        return NULL;
+};
+
+command_t* get_from_command_buffer(){
+        command_t* cmd = NULL;
+        pthread_mutex_lock(&mutex);
+        while(buff_count == 0)
+                pthread_cond_wait (&non_empty, &mutex);
+
+
+        cmd = command_buffer[out];
+        out = (out+1)% BABBLE_BUFFER_SIZE;
+        buff_count--;
+        pthread_cond_signal(&non_full);
+        pthread_mutex_unlock(&mutex);
+
+        return cmd;
+}
+
 void* communication_thread(void* arg)
 {
         socket_t* socket = (socket_t*)arg;
@@ -193,15 +224,7 @@ void* communication_thread(void* arg)
                                 free(cmd);
                         }
                         else {
-                                pthread_mutex_lock(&mutex);
-                                while(buff_count == BABBLE_BUFFER_SIZE)
-                                        pthread_cond_wait(&non_full,&mutex);
-
-                                command_buffer[in] = cmd;
-                                in = (in + 1) % BABBLE_BUFFER_SIZE;
-                                buff_count++;
-                                pthread_cond_signal(&non_empty);
-                                pthread_mutex_unlock(&mutex);
+                                put_in_command_buffer(cmd);
                         }
                         free(recv_buff);
                 }
@@ -226,16 +249,7 @@ void* executor_thread(void* arg) {
         answer_t *ans = NULL;
         command_t *cmd;
         for(;;) {
-                pthread_mutex_lock(&mutex);
-                while(buff_count == 0)
-                        pthread_cond_wait (&non_empty, &mutex);
-
-
-                cmd = command_buffer[out];
-                out = (out+1)% BABBLE_BUFFER_SIZE;
-                buff_count--;
-                pthread_cond_signal(&non_full);
-                pthread_mutex_unlock(&mutex);
+                cmd = get_from_command_buffer();
 
                 if(process_command(cmd, &ans) == -1) {
                         fprintf(stderr, "Warning: unable to process command from client %lu\n", cmd->key);
