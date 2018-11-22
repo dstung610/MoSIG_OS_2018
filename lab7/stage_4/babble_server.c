@@ -350,7 +350,6 @@ int main(int argc, char *argv[])
         }
 
         printf("Babble server bound to port %d\n", portno);
-
         /* Executor thread */
         for (size_t j = 0; j < BABBLE_EXECUTOR_THREADS; j++) {
                 pthread_create(&executor_threads[j], NULL, executor_thread, NULL);
@@ -360,7 +359,6 @@ int main(int argc, char *argv[])
         for (size_t k = 0; k < BABBLE_ANSWER_THREADS; k++) {
                 pthread_create(&ans_threads[k], NULL, answer_thread, NULL);
         }
-
         /* main server loop */
         while(1) {
 

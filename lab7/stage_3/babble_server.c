@@ -319,11 +319,8 @@ int main(int argc, char *argv[])
         int opt;
         int nb_args=1;
 
-        pthread_t communication_threads[BABBLE_BUFFER_SIZE];
         pthread_t executor_threads[BABBLE_EXECUTOR_THREADS];
         pthread_t ans_threads[BABBLE_ANSWER_THREADS];
-
-        int index = 0;
 
         socket_t *s = NULL;
 
@@ -370,10 +367,10 @@ int main(int argc, char *argv[])
                 }
                 s = malloc(sizeof(socket_t));
                 s->fd = newsockfd;
-                if(pthread_create (&communication_threads[index], NULL, communication_thread, (void*)s) != 0) {
+                pthread_t communication_threads;
+                if(pthread_create (&communication_threads, NULL, communication_thread, (void*)s) != 0) {
                         printf("Failed to create communication_thread\n");
                 }
-                index++;
 
         }
         free(s);
