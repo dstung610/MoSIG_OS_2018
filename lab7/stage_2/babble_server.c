@@ -123,8 +123,8 @@ static int process_command(command_t *cmd, answer_t **answer)
 
 void* communication_thread(void* arg)
 {
-        socket_t* socket = (socket_t*)arg;
-        int newsockfd = socket->fd;
+        int newsockfd = *(int*)arg;
+        // printf("Value: %d\n", newsockfd);
         char* recv_buff=NULL;
         int recv_size=0;
 
@@ -306,7 +306,6 @@ int main(int argc, char *argv[])
                 index++;
 
         }
-        free(s);
         close(sockfd);
         return 0;
 }

@@ -9,11 +9,6 @@ int nb_registered_clients;
 
 pthread_mutex_t regis_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// pthread_rwlockattr_t attr;
-// pthread_rwlockattr_init(&attr);
-pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
-
-
 void registration_init(void)
 {
         nb_registered_clients=0;
@@ -25,20 +20,20 @@ client_bundle_t* registration_lookup(unsigned long key)
 {
         int i=0;
         client_bundle_t *c = NULL;
-        pthread_rwlock_rdlock(&rwlock);
+
         for(i=0; i< nb_registered_clients; i++) {
                 if(registration_table[i]->key == key) {
                         c = registration_table[i];
                         break;
                 }
         }
-        pthread_rwlock_unlock(&rwlock);
+
         return c;
 }
 
 int registration_insert(client_bundle_t* cl)
 {
-        pthread_rwlock_wrlock(&rwlock);
+        pthread_mutex_lock(&regis_mutex);
         if(nb_registered_clients == MAX_CLIENT) {
                 fprintf(stderr, "ERROR: MAX NUMBER OF CLIENTS REACHED\n");
                 return -1;
@@ -57,13 +52,13 @@ int registration_insert(client_bundle_t* cl)
         if(i != nb_registered_clients) {
                 fprintf(stderr, "Error -- id % ld already in use\n", cl->key);
                 return -1;
-                pthread_rwlock_unlock(&rwlock);
+                pthread_mutex_unlock(&regis_mutex);
         }
 
         /* insert cl */
         registration_table[nb_registered_clients]=cl;
         nb_registered_clients++;
-        pthread_rwlock_unlock(&rwlock);
+        pthread_mutex_unlock(&regis_mutex);
 
         return 0;
 }
@@ -72,7 +67,7 @@ int registration_insert(client_bundle_t* cl)
 client_bundle_t* registration_remove(unsigned long key)
 {
         int i=0;
-        pthread_rwlock_wrlock(&rwlock);
+        pthread_mutex_lock(&regis_mutex);
         for(i=0; i<nb_registered_clients; i++) {
                 if(registration_table[i]->key == key) {
                         break;
@@ -81,7 +76,7 @@ client_bundle_t* registration_remove(unsigned long key)
 
         if(i == nb_registered_clients) {
                 fprintf(stderr, "Error -- no client found\n");
-                pthread_rwlock_unlock(&rwlock);
+                pthread_mutex_unlock(&regis_mutex);
                 return NULL;
         }
 
@@ -90,6 +85,6 @@ client_bundle_t* registration_remove(unsigned long key)
 
         nb_registered_clients--;
         registration_table[i] = registration_table[nb_registered_clients];
-        pthread_rwlock_unlock(&rwlock);
+        pthread_mutex_unlock(&regis_mutex);
         return cl;
 }
