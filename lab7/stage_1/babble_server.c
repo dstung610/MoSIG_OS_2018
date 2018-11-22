@@ -262,6 +262,8 @@ int main(int argc, char *argv[])
         pthread_t tids[BABBLE_BUFFER_SIZE];
         int index = 0;
 
+        socket_t *s = NULL;
+
         while ((opt = getopt (argc, argv, "+p:")) != -1) {
                 switch (opt) {
                 case 'p':
@@ -296,8 +298,9 @@ int main(int argc, char *argv[])
                 if((newsockfd= server_connection_accept(sockfd))==-1) {
                         return -1;
                 }
-
-                if(pthread_create (&tids[index], NULL, communication_thread, (void*)&newsockfd) != 0) {
+                s = malloc(sizeof(socket_t));
+                s->fd = newsockfd;
+                if(pthread_create (&tids[index], NULL, communication_thread, (void*)s) != 0) {
                         printf("Failed to create communication_thread\n");
                 }
                 index++;

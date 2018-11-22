@@ -39,4 +39,8 @@ int write_to_client(unsigned long key, int size, void* buf);
 /* get client name from client key */
 char* get_name_from_key(unsigned long key);
 
+typedef struct socket {
+        int fd;
+}socket_t;
+
 #endif
