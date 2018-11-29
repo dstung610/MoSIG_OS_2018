@@ -56,8 +56,9 @@ int registration_insert(client_bundle_t* cl)
 
         if(i != nb_registered_clients) {
                 fprintf(stderr, "Error -- id % ld already in use\n", cl->key);
-                return -1;
                 pthread_rwlock_unlock(&rwlock);
+                return -1;
+
         }
 
         /* insert cl */

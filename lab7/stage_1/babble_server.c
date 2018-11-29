@@ -156,6 +156,7 @@ void* communication_thread(void* arg)
 {
         socket_t* socket = (socket_t*)arg;
         int newsockfd = socket->fd;
+        free(arg);
         char* recv_buff=NULL;
         int recv_size=0;
 
