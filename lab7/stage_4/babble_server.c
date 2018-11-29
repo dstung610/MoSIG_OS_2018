@@ -137,18 +137,17 @@ void take_cmd_to_current_position(int index){
                 } else {
                         j = i - 1;
                 }
-                command_buffer[i] = command_buffer[j];
+                *command_buffer[i] = *command_buffer[j];
                 if (i == 0) {
                         i = BABBLE_PRODCONS_SIZE - 1;
                 } else {
                         i--;
                 }
         } while(i!=out);
-        command_buffer[i] = publish_cmd;
+        *command_buffer[i] = *publish_cmd;
 }
 
 void rearrange_publish_cmd(){
-        // printf("cmd not PUBLISH\n");
         command_t* tmp_cmd = NULL;
         if (out < in) {
                 for (int i = out; i < in; i++) {
@@ -198,11 +197,10 @@ command_t* get_from_command_buffer(){
         while(buff_count == 0)
                 pthread_cond_wait (&non_empty, &mutex);
 
-
-        // if (cmd->cid != PUBLISH) {
-        // printf("cmd not PUBLISH\n");
-        rearrange_publish_cmd();
-        // }
+        command_t* tmp_cmd = command_buffer[out];
+        if (tmp_cmd->cid != PUBLISH) {
+                rearrange_publish_cmd();
+        }
 
         cmd = command_buffer[out];
         out = (out+1)% BABBLE_PRODCONS_SIZE;
