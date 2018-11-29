@@ -16,6 +16,7 @@
 #include "babble_utils.h"
 #include "babble_communication.h"
 #include "babble_server_answer.h"
+#include "babble_registration.h"
 
 command_t *command_buffer[BABBLE_PRODCONS_SIZE];
 int in = 0, out = 0, buff_count = 0;
@@ -28,6 +29,9 @@ int in_ans = 0, out_ans = 0, buff_count_ans = 0;
 pthread_mutex_t mutex_ans = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t non_empty_ans = PTHREAD_COND_INITIALIZER;
 pthread_cond_t non_full_ans = PTHREAD_COND_INITIALIZER;
+
+pthread_mutex_t mutex_rdv = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t no_remain_command = PTHREAD_COND_INITIALIZER;
 
 static void display_help(char *exec)
 {
@@ -127,6 +131,7 @@ static int process_command(command_t *cmd, answer_t **answer)
         return res;
 }
 
+
 void* put_in_command_buffer(command_t* cmd){
         pthread_mutex_lock(&mutex);
         while(buff_count == BABBLE_PRODCONS_SIZE)
@@ -194,6 +199,7 @@ void* communication_thread(void* arg)
         free(arg);
         char* recv_buff=NULL;
         int recv_size=0;
+        client_bundle_t *client = NULL;
 
         unsigned long client_key=0;
         char client_name[BABBLE_ID_SIZE+1];
@@ -260,6 +266,14 @@ void* communication_thread(void* arg)
                                 free(cmd);
                         }
                         else {
+
+                                client = registration_lookup(cmd->key);
+                                pthread_mutex_lock(&mutex_rdv);
+                                if (cmd->cid!=RDV) {
+                                        client->remaining_command++;
+                                }
+                                pthread_mutex_unlock(&mutex_rdv);
+
                                 put_in_command_buffer(cmd);
                         }
                         free(recv_buff);
@@ -284,11 +298,31 @@ void* executor_thread(void* arg) {
         printf("Executor_thread ready\n");
         answer_t *ans = NULL;
         command_t *cmd;
+        client_bundle_t* client = NULL;
         for(;;) {
                 cmd = get_from_command_buffer();
 
+                client = registration_lookup(cmd->key);
+
+                /* Waiting on condition where client executed all the command */
+                if (cmd->cid == RDV) {
+                        pthread_mutex_lock(&mutex_rdv);
+                        while (client->remaining_command != 0) {
+                                pthread_cond_wait(&no_remain_command, &mutex_rdv);
+                        }
+                        pthread_mutex_unlock(&mutex_rdv);
+                }
+
                 if(process_command(cmd, &ans) == -1) {
                         fprintf(stderr, "Warning: unable to process command from client %lu\n", cmd->key);
+                }
+
+                /* Broadcast the condition for RDV */
+                if (cmd->cid != RDV) {
+                        pthread_mutex_lock(&mutex_rdv);
+                        client->remaining_command--;
+                        pthread_cond_signal(&no_remain_command);
+                        pthread_mutex_unlock(&mutex_rdv);
                 }
                 free(cmd);
 
