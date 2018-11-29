@@ -17,7 +17,7 @@
 #include "babble_communication.h"
 #include "babble_server_answer.h"
 
-command_t *command_buffer[BABBLE_BUFFER_SIZE];
+command_t *command_buffer[BABBLE_PRODCONS_SIZE];
 int in = 0, out = 0, buff_count = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t non_empty = PTHREAD_COND_INITIALIZER;
@@ -124,11 +124,11 @@ static int process_command(command_t *cmd, answer_t **answer)
 
 void* put_in_command_buffer(command_t* cmd){
         pthread_mutex_lock(&mutex);
-        while(buff_count == BABBLE_BUFFER_SIZE)
+        while(buff_count == BABBLE_PRODCONS_SIZE)
                 pthread_cond_wait(&non_full,&mutex);
 
         command_buffer[in] = cmd;
-        in = (in + 1) % BABBLE_BUFFER_SIZE;
+        in = (in + 1) % BABBLE_PRODCONS_SIZE;
         buff_count++;
         pthread_cond_signal(&non_empty);
         pthread_mutex_unlock(&mutex);
@@ -144,7 +144,7 @@ command_t* get_from_command_buffer(){
 
 
         cmd = command_buffer[out];
-        out = (out+1)% BABBLE_BUFFER_SIZE;
+        out = (out+1)% BABBLE_PRODCONS_SIZE;
         buff_count--;
         pthread_cond_signal(&non_full);
         pthread_mutex_unlock(&mutex);

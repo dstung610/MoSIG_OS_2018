@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
 #include "babble_server.h"
 #include "babble_utils.h"
@@ -16,6 +17,7 @@
 #include "babble_timeline.h"
 
 time_t server_start;
+pthread_mutex_t cmd_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* freeing client_bundle_t struct */
 static void free_client_data(client_bundle_t *client)
@@ -240,7 +242,7 @@ int run_publish_command(command_t *cmd, answer_t **answer)
                 generate_cmd_error(cmd,answer);
                 return -1;
         }
-
+        pthread_mutex_lock(&cmd_mutex);
         for(i=0; i<client->nb_followers; i++) {
                 if(!client->followers[i]->disconnected) {
                         date = timeline_insert(client->followers[i]->timeline, client, cmd->msg);
@@ -252,6 +254,7 @@ int run_publish_command(command_t *cmd, answer_t **answer)
                         client->nb_followers--;
                 }
         }
+        pthread_mutex_unlock(&cmd_mutex);
 
         printf("### Client %s published { %s } at date %ld\n", client->client_name, cmd->msg, date);
 
@@ -297,7 +300,9 @@ int run_follow_command(command_t *cmd, answer_t **answer)
 
         /* if client is not already followed, add it */
         int i=0;
-
+        /* Provided lock to ensure nb_followers will be modified
+         *  by one executor_thread at a time */
+        pthread_mutex_lock(&cmd_mutex);
         for(i=0; i<f_client->nb_followers; i++) {
                 if(f_client->followers[i]->key == client->key) {
                         break;
@@ -311,6 +316,7 @@ int run_follow_command(command_t *cmd, answer_t **answer)
         else{
                 printf("Warning: %s already follows %s\n", client->client_name, f_client->client_name);
         }
+        pthread_mutex_unlock(&cmd_mutex);
 
         /* generate answer to client */
         if(cmd->answer_expected) {

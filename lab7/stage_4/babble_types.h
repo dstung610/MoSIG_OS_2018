@@ -25,7 +25,6 @@ typedef struct command {
         unsigned long key;
         char msg[BABBLE_SIZE];
         int answer_expected; /* answer sent only if set */
-        int processed; /* set if cmd has been taken care by an executor_thread */
 } command_t;
 
 typedef struct client_bundle {

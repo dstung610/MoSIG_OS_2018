@@ -17,13 +17,13 @@
 #include "babble_communication.h"
 #include "babble_server_answer.h"
 
-command_t *command_buffer[BABBLE_BUFFER_SIZE];
+command_t *command_buffer[BABBLE_PRODCONS_SIZE];
 int in = 0, out = 0, buff_count = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t non_empty = PTHREAD_COND_INITIALIZER;
 pthread_cond_t non_full = PTHREAD_COND_INITIALIZER;
 
-answer_t *answer_buffer[BABBLE_BUFFER_SIZE];
+answer_t *answer_buffer[BABBLE_PRODCONS_SIZE];
 int in_ans = 0, out_ans = 0, buff_count_ans = 0;
 pthread_mutex_t mutex_ans = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t non_empty_ans = PTHREAD_COND_INITIALIZER;
@@ -127,21 +127,63 @@ static int process_command(command_t *cmd, answer_t **answer)
         return res;
 }
 
-void swap_publish_cmd(int index){
-        command_t* publish_cmd = command_buffer[index];
-        command_t* current_out_cmd = command_buffer[out];
-        command_buffer[index] = current_out_cmd;
-        command_buffer[out] = publish_cmd;
+void take_cmd_to_current_position(int index){
+        command_t *publish_cmd = command_buffer[index];
+        int i = index;
+        int j;
+        do {
+                if (i == 0) {
+                        j = BABBLE_PRODCONS_SIZE - 1;
+                } else {
+                        j = i - 1;
+                }
+                command_buffer[i] = command_buffer[j];
+                if (i == 0) {
+                        i = BABBLE_PRODCONS_SIZE - 1;
+                } else {
+                        i--;
+                }
+        } while(i!=out);
+        command_buffer[i] = publish_cmd;
+}
 
+void rearrange_publish_cmd(){
+        // printf("cmd not PUBLISH\n");
+        command_t* tmp_cmd = NULL;
+        if (out < in) {
+                for (int i = out; i < in; i++) {
+                        tmp_cmd = command_buffer[i];
+                        if (tmp_cmd->cid == PUBLISH) {
+                                take_cmd_to_current_position(i);
+                                break;
+                        }
+                }
+
+        }
+        else {
+                int i = out;
+                do {
+                        tmp_cmd = command_buffer[i];
+                        if (tmp_cmd->cid == PUBLISH) {
+                                take_cmd_to_current_position(i);
+                                break;
+                        }
+                        if (i + 1 == BABBLE_PRODCONS_SIZE) {
+                                i = 0;
+                        } else {
+                                i++;
+                        }
+                } while(i == in);
+        }
 }
 
 void* put_in_command_buffer(command_t* cmd){
         pthread_mutex_lock(&mutex);
-        while(buff_count == BABBLE_BUFFER_SIZE)
+        while(buff_count == BABBLE_PRODCONS_SIZE)
                 pthread_cond_wait(&non_full,&mutex);
 
         command_buffer[in] = cmd;
-        in = (in + 1) % BABBLE_BUFFER_SIZE;
+        in = (in + 1) % BABBLE_PRODCONS_SIZE;
         buff_count++;
         pthread_cond_signal(&non_empty);
         pthread_mutex_unlock(&mutex);
@@ -156,18 +198,15 @@ command_t* get_from_command_buffer(){
         while(buff_count == 0)
                 pthread_cond_wait (&non_empty, &mutex);
 
-        // command_t* tmp_cmd = NULL;
-        // for (int i = 0; i < BABBLE_BUFFER_SIZE; i++) {
-        //         tmp_cmd = command_buffer[i];
-        //         if (tmp_cmd->processed && tmp_cmd->cid == PUBLISH) {
-        //                 swap_publish_cmd(i);
-        //                 break;
-        //         }
+
+        // if (cmd->cid != PUBLISH) {
+        // printf("cmd not PUBLISH\n");
+        rearrange_publish_cmd();
         // }
+
         cmd = command_buffer[out];
-        out = (out+1)% BABBLE_BUFFER_SIZE;
+        out = (out+1)% BABBLE_PRODCONS_SIZE;
         buff_count--;
-        cmd->processed = 1;
         pthread_cond_signal(&non_full);
         pthread_mutex_unlock(&mutex);
 
@@ -176,11 +215,11 @@ command_t* get_from_command_buffer(){
 
 void* put_in_answer_buffer(answer_t* ans){
         pthread_mutex_lock(&mutex_ans);
-        while(buff_count_ans == BABBLE_BUFFER_SIZE)
+        while(buff_count_ans == BABBLE_PRODCONS_SIZE)
                 pthread_cond_wait(&non_full_ans,&mutex_ans);
 
         answer_buffer[in_ans] = ans;
-        in_ans = (in_ans + 1) % BABBLE_BUFFER_SIZE;
+        in_ans = (in_ans + 1) % BABBLE_PRODCONS_SIZE;
         buff_count_ans++;
         pthread_cond_signal(&non_empty_ans);
         pthread_mutex_unlock(&mutex_ans);
@@ -196,7 +235,7 @@ answer_t* get_from_answer_buffer(){
 
 
         ans = answer_buffer[out_ans];
-        out_ans = (out_ans+1)% BABBLE_BUFFER_SIZE;
+        out_ans = (out_ans+1)% BABBLE_PRODCONS_SIZE;
         buff_count_ans--;
         pthread_cond_signal(&non_full_ans);
         pthread_mutex_unlock(&mutex_ans);
