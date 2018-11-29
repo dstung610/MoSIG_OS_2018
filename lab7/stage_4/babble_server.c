@@ -127,6 +127,14 @@ static int process_command(command_t *cmd, answer_t **answer)
         return res;
 }
 
+void swap_publish_cmd(int index){
+        command_t* publish_cmd = command_buffer[index];
+        command_t* current_out_cmd = command_buffer[out];
+        command_buffer[index] = current_out_cmd;
+        command_buffer[out] = publish_cmd;
+
+}
+
 void* put_in_command_buffer(command_t* cmd){
         pthread_mutex_lock(&mutex);
         while(buff_count == BABBLE_BUFFER_SIZE)
@@ -143,14 +151,23 @@ void* put_in_command_buffer(command_t* cmd){
 
 command_t* get_from_command_buffer(){
         command_t* cmd = NULL;
+
         pthread_mutex_lock(&mutex);
         while(buff_count == 0)
                 pthread_cond_wait (&non_empty, &mutex);
 
-
+        // command_t* tmp_cmd = NULL;
+        // for (int i = 0; i < BABBLE_BUFFER_SIZE; i++) {
+        //         tmp_cmd = command_buffer[i];
+        //         if (tmp_cmd->processed && tmp_cmd->cid == PUBLISH) {
+        //                 swap_publish_cmd(i);
+        //                 break;
+        //         }
+        // }
         cmd = command_buffer[out];
         out = (out+1)% BABBLE_BUFFER_SIZE;
         buff_count--;
+        cmd->processed = 1;
         pthread_cond_signal(&non_full);
         pthread_mutex_unlock(&mutex);
 
@@ -361,7 +378,6 @@ int main(int argc, char *argv[])
         }
         /* main server loop */
         while(1) {
-
                 if((newsockfd= server_connection_accept(sockfd))==-1) {
                         return -1;
                 }
@@ -371,7 +387,6 @@ int main(int argc, char *argv[])
                 if(pthread_create (&communication_threads, NULL, communication_thread, (void*)s) != 0) {
                         printf("Failed to create communication_thread\n");
                 }
-                index++;
 
         }
         free(s);
